@@ -2,9 +2,9 @@
   import Calendar from "@event-calendar/core";
   import TimeGrid from "@event-calendar/time-grid";
   import DayGrid from "@event-calendar/day-grid";
-  import Resourse from "@event-calendar/resource-time-grid";
-  import iterx from "@event-calendar/interaction";
-  import listy from "@event-calendar/list";
+  import ResourceTimeGrid from "@event-calendar/resource-time-grid";
+  import Interaction from "@event-calendar/interaction";
+  import CList from "@event-calendar/list";
 
   import { onMount } from 'svelte'
   import { supabase } from './supabaseClient'
@@ -24,12 +24,32 @@
     })
   })
 
+  // let currentUserId = 1;
+
+  let oldColors = {}; // id -> bgcolor for mouse hover (very hacky for now)
+
   let myEvents = [];
 
+  /* default properties of an Event object created from a selection. */
+  const defaultEvent = {
+    // id will be generated
+    // resourceId should be current user id
+    // resourceIds unused if resourceId is
+    allDay: false,
+    // start, end are given in selection
+    title: "default event",
+    editable: true, // draggable and resizable
+    // startEditable // draggable (redundant)
+    // display: // TODO?
+    backgroundColor: "#555555",
+    textColor: "#ffffff",
+    extendedProps: {}, // TODO !! important for more capabilities, e.g. deleting?
+  }
+
   let ec;
-  let plugins = [TimeGrid, DayGrid, Resourse, iterx, listy];
+  let plugins = [TimeGrid, DayGrid, ResourceTimeGrid, Interaction, CList];
   let options = {
-    view: "timeGridDay",
+    view: "resourceTimeGridDay",
     headerToolbar: {
       start: "prev,next today",
       center: "title",
@@ -52,26 +72,46 @@
     // },
     dayMaxEvents: true,
     nowIndicator: true,
+    eventDragMinDistance: 5, // not working?
     selectable: true,
-    eventDragStart: x => {
-      // // prompt user to change text of event
-      // console.log(x.event);
-      // console.log(x.event.title);
-      // let updated = prompt('Change event text', x.event.title);
-      // if (updated) {
-      //   x.event.title = updated;
+    eventClick: x => {
+      console.log("eventClick", x);
+      let newTitle = prompt('Event title:', x.event.title);
+      // if (newTitle) {
+        x.event.title = newTitle;
       // }
-      // console.log(x.event.title);
-      // console.log(events);
-
+      ec.updateEvent(x.event);
+    },
+    eventMouseEnter: x => {
+      // console.log("eventMouseEnter", x);
+      let currentbg = x.event.backgroundColor;
+      if (!oldColors[x.event.id]) {
+        oldColors[x.event.id] = currentbg;
+      }
+      x.event.backgroundColor = "#dddddd";
+      ec.updateEvent(x.event);
 
     },
+    eventMouseLeave: x => {
+      // console.log("eventMouseLeave", x);
+      x.event.backgroundColor = oldColors[x.event.id];
+      delete oldColors[x.event.id];
+      ec.updateEvent(x.event);
+    },
+
     // eventDragStop: console.log,
     select: (x) => {
-      console.log(x);
-      myEvents.push(x);
-      ec.setOption("events", myEvents);
-      console.log(myEvents);
+      console.log("selection", x);
+      let newEvent = { ...defaultEvent, ...x };
+      newEvent.resourceId = x.resource.id;
+      ec.addEvent(newEvent);
+      ec.unselect();
+
+      // TODO: add to db and call ec.refetchEvents()
+
+      // myEvents.push(x);
+      // ec.setOption("events", myEvents);
+      // console.log(ec.getEvents());
     },
     editable: true,
   };
@@ -81,6 +121,7 @@
     return (norm < 10 ? "0" : "") + norm;
   }
 
+  // initial dummy events
   function createEvents() {
     let days = [];
     for (let i = -1; i < 8; ++i) {
@@ -97,6 +138,14 @@
 
     // return
     myEvents = [
+      {
+        start: days[6] + " 09:00",
+        end: days[6] + " 10:30",
+        resourceId: 1,
+        title: "breakfast!",
+        color: "#FE1B34",
+      },
+
       {
         start: days[0] + " 00:00",
         end: days[0] + " 09:00",
@@ -191,6 +240,8 @@
 </script>
 
 <Calendar bind:this={ec} {plugins} {options} />
+<Calendar {plugins} {options} />
+
 
 <div class="container" style="padding: 50px 0 100px 0">
     {#if !session}
