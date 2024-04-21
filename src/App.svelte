@@ -5,6 +5,8 @@
   import ResourceTimeGrid from "@event-calendar/resource-time-grid";
   import Interaction from "@event-calendar/interaction";
   import CList from "@event-calendar/list";
+  import Modal from "./lib/Modal.svelte";
+  import createEvents from "./lib/createEvents";
 
   import { onMount } from 'svelte'
   import { supabase } from './supabaseClient'
@@ -22,10 +24,16 @@
     supabase.auth.onAuthStateChange((_event, _session) => {
       session = _session
     })
-  })
 
+
+    // callback when authed
+    // query userId
+    // query events based on userId --- is this even necessary?? shouldn't db know who you are?
+    // update myEvents and refresh view
+  })
   
   let currentUserId = 1;
+
   function checkPerms(id) {
     // check if array
     if (Array.isArray(id)) {
@@ -36,8 +44,6 @@
   }
   
   let oldColors = {}; // id -> bgcolor for mouse hover (very hacky for now)
-
-  let myEvents = [];
 
   /* default properties of an Event object created from a selection. */
   const defaultEvent = {
@@ -117,159 +123,86 @@
       ec.updateEvent(x.event);
     },
 
-    select: (x) => {
+    select: async (x) => {
+
       console.log("selection", x);
       let resId = x.resource.id;
       if (checkPerms(resId)) {
+
+        
+
         // TODO: change to add to db and call ec.refetchEvents()
         let newEvent = { ...defaultEvent, ...x };
         newEvent.resourceId = x.resource.id;
         ec.addEvent(newEvent);
+
+        let insertObject = { 
+            
+            information: newEvent,
+            owner: "5a5ae255-dc27-4d94-a635-7c4978998861",
+            event_start_time: x.start.toISOString(),
+            event_end_time: x.end.toISOString(),
+          }
+        console.log(insertObject)
+        const { data, error } = await supabase
+          .from('Events')
+          .insert(insertObject)
+          .select()
+        console.log(data, error)
       }
       ec.unselect();
+
 
 
       // myEvents.push(x);
       // ec.setOption("events", myEvents);
       // console.log(ec.getEvents());
+
+      // create Modal component
+      let modal = new Modal({
+        target: document.body,
+        props: {
+          // event: x,
+        },
+      });
+
     },
     editable: true,
   };
 
-  function _pad(num) {
-    let norm = Math.floor(Math.abs(num));
-    return (norm < 10 ? "0" : "") + norm;
-  }
+  (async () => {
+    const { data, error } = await supabase
+      .from('Events')
+      .select()
+    console.log(data,error)
+  })();
 
-  // initial dummy events
-  function createEvents() {
-    let days = [];
-    for (let i = -1; i < 8; ++i) {
-      let day = new Date();
-      let diff = i - day.getDay();
-      day.setDate(day.getDate() + diff);
-      days[i] =
-        day.getFullYear() +
-        "-" +
-        _pad(day.getMonth() + 1) +
-        "-" +
-        _pad(day.getDate());
+ async function pullEvents() {
+    const { data, error } = await supabase
+      .from('Events')
+      .select()
+    console.log(data,error);
+    if (error || !data) {
+      console.log("error", error);
+      return;
     }
+    let newEvents = data.map(x => x.information).filter(Boolean);
+    ec.setOption("events", newEvents);
+  };
 
-    // return
-    myEvents = [
-      {
-        start: days[6] + " 09:00",
-        end: days[6] + " 10:30",
-        resourceId: 1,
-        title: "breakfast!",
-        color: "#FE5B74",
-      },
-      {
-        start: days[6] + " 14:00",
-        end: days[6] + " 19:00",
-        resourceId: 2,
-        title: "nap time",
-        color: "#44C299",
-      },
-      {
-        start: days[0] + " 00:00",
-        end: days[0] + " 09:00",
-        resourceId: 1,
-        display: "background",
-      },
-      {
-        start: days[1] + " 12:00",
-        end: days[1] + " 14:00",
-        resourceId: 2,
-        display: "background",
-      },
-      {
-        start: days[2] + " 17:00",
-        end: days[2] + " 24:00",
-        resourceId: 1,
-        display: "background",
-      },
-      {
-        start: days[3] + " 10:00",
-        end: days[3] + " 14:00",
-        resourceId: 1,
-        title: "The calendar can display background and regular events",
-        color: "#FE6B64",
-      },
-      {
-        start: days[1] + " 16:00",
-        end: days[2] + " 08:00",
-        resourceId: 2,
-        title: "An event may span to another day",
-        color: "#B29DD9",
-      },
-      {
-        start: days[2] + " 09:00",
-        end: days[2] + " 13:00",
-        resourceId: 2,
-        title:
-          "Events can be assigned to resources and the calendar has the resources view built-in",
-        color: "#779ECB",
-      },
-      {
-        start: days[3] + " 14:00",
-        end: days[3] + " 20:00",
-        resourceId: 1,
-        title: "",
-        color: "#FE6B64",
-      },
-      {
-        start: days[3] + " 15:00",
-        end: days[3] + " 18:00",
-        resourceId: 1,
-        title: "Overlapping events are positioned properly",
-        color: "#779ECB",
-      },
-      {
-        start: days[5] + " 10:00",
-        end: days[5] + " 16:00",
-        resourceId: 2,
-        title: {
-          html: "You have complete control over the <i><b>display</b></i> of events…",
-        },
-        color: "#779ECB",
-      },
-      {
-        start: days[7] + " 18:00",
-        end: days[7] + " 21:00",
-        resourceId: 2,
-        title: "",
-        color: "#B29DD9",
-      },
-      {
-        start: days[1],
-        end: days[3],
-        resourceId: 1,
-        title: "All-day events can be displayed at the top",
-        color: "#B29DD9",
-        allDay: true,
-      },
-    ];
-
-    myEvents.map((x) => {
-      if (x.resourceId === Number(currentUserId)) {
-        x.editable = true;
-      } else {
-        x.editable = false;
-        x.startEditable = false;
-        x.durationEditable = false;
-      }
-    });
-
-    return myEvents;
-  }
-
-  import Demo from "./demo.svelte";
+  let formData = {
+        taskName: '',
+        email: '',
+        message: ''
+    };
+    let showModal = false;
 </script>
 
+<button on:click={pullEvents}>
+	Update database
+</button>
+
 <Calendar bind:this={ec} {plugins} {options} />
-<Calendar {plugins} {options} />
 
 
 <div class="container" style="padding: 50px 0 100px 0">
@@ -280,4 +213,19 @@
     {/if}
   </div>
 
+
+<button on:click={() => (showModal = true)}> show modal </button>
+<Modal on:notify={sumbitFunc} bind:showModal>
+  <!-- <form on:submit|preventDefault={handleSubmit}> -->
+  <form on:submit|preventDefault>
+    <label for="taskName">Name:</label>
+    <input type="text" id="taskName" bind:value={formData.taskName} />
+
+    <button type="submit">Submit</button>
+  </form>
+
+</Modal>
+
 <!-- <Demo /> -->
+
+<!-- <Modal /> -->
